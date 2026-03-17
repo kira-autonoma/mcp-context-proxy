@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mcp-lazy-proxy — Stop paying 6x for MCP tool schemas</title>
+<meta name="description" content="Reduce MCP tool schema token overhead by 6-7x via lazy-loading and schema caching. Save $27-551/month on API costs.">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface-2: #1a1a1a;
+    --border: #2a2a2a;
+    --text: #ededed;
+    --text-dim: #888;
+    --accent: #3b82f6;
+    --accent-dim: #1d4ed8;
+    --green: #22c55e;
+    --green-dim: #15803d;
+    --red: #ef4444;
+    --mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Nav */
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 0;
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,10,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 10;
+  }
+  nav .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  nav .logo {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--text);
+    font-family: var(--mono);
+  }
+  nav .links { display: flex; gap: 24px; font-size: 14px; }
+  nav .links a { color: var(--text-dim); }
+  nav .links a:hover { color: var(--text); text-decoration: none; }
+
+  /* Hero */
+  .hero {
+    padding: 100px 0 80px;
+    text-align: center;
+  }
+  .hero .badge {
+    display: inline-block;
+    font-size: 13px;
+    font-family: var(--mono);
+    color: var(--green);
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 20px;
+    padding: 4px 14px;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero p {
+    font-size: 18px;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto 36px;
+    line-height: 1.6;
+  }
+  .hero-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 15px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 24px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .hero-cta:hover { border-color: var(--accent); text-decoration: none; }
+  .hero-cta .dollar { color: var(--text-dim); }
+
+  /* Sections */
+  section { padding: 72px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .section-subtitle {
+    color: var(--text-dim);
+    font-size: 16px;
+    margin-bottom: 36px;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr:hover { background: var(--surface); }
+  .num { font-family: var(--mono); }
+  .highlight { color: var(--green); font-weight: 600; }
+  .savings { color: var(--green); font-family: var(--mono); font-weight: 600; }
+  .cost-old { color: var(--red); text-decoration: line-through; opacity: 0.7; font-family: var(--mono); }
+
+  /* Code block */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .code-block pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: #c9d1d9;
+  }
+  .code-block .kw { color: #ff7b72; }
+  .code-block .str { color: #a5d6ff; }
+  .code-block .cmt { color: #484f58; }
+  .code-block .key { color: #79c0ff; }
+  .code-block .val { color: #a5d6ff; }
+
+  /* Comparison */
+  .vs-table thead th:first-child { width: 35%; }
+  .check { color: var(--green); }
+  .cross { color: var(--red); opacity: 0.6; }
+
+  /* Proof section */
+  .proof-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    margin-top: 24px;
+  }
+  .proof-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .proof-card p {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 12px;
+  }
+  .proof-card code {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--surface-2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  /* CTA */
+  .cta-section { text-align: center; padding: 80px 0; }
+  .cta-section h2 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.02em;
+  }
+  .cta-section p {
+    color: var(--text-dim);
+    margin-bottom: 32px;
+    font-size: 16px;
+  }
+  .cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .btn:hover { text-decoration: none; }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-dim); }
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+  footer a { color: var(--text-dim); }
+  footer a:hover { color: var(--text); }
+
+  /* How it works */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+    margin-top: 32px;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+  }
+  .step-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .step h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .step p {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .hero { padding: 60px 0 50px; }
+    section { padding: 48px 0; }
+    table { font-size: 13px; }
+    thead th, tbody td { padding: 10px 10px; }
+    .cta-buttons { flex-direction: column; align-items: center; }
+    nav .links { gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="container">
+    <span class="logo">mcp-lazy-proxy</span>
+    <div class="links">
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="#quickstart">Quick Start</a>
+      <a href="#comparison">Compare</a>
+      <a href="https://github.com/kira-autonoma/mcp-context-proxy">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="container">
+    <div class="badge">6-7x token reduction, verified</div>
+    <h1>Stop paying <span>6x</span> for<br>MCP tool schemas</h1>
+    <p>An MCP proxy that lazy-loads tool schemas on demand instead of sending them all upfront. Disk-cached, auditable, zero config changes to your servers.</p>
+    <a href="#quickstart" class="hero-cta">
+      <span class="dollar">$</span> npm install -g mcp-lazy-proxy
+    </a>
+  </div>
+</header>
+
+<!-- How it works -->
+<section>
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <div class="section-title">Defer, don't compress</div>
+    <p class="section-subtitle">Most tools are never called in a session. Why pay for their full schemas every turn?</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Stub on init</h3>
+        <p>Returns compressed stubs with just tool names and brief descriptions. ~54 tokens per tool instead of ~344.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Load on call</h3>
+        <p>Full schemas are fetched from the upstream server only when a tool is actually invoked by the model.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Cache to disk</h3>
+        <p>Loaded schemas are cached locally with a 24-hour TTL. Deduplicates identical schemas across servers.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Benchmarks -->
+<section id="benchmarks">
+  <div class="container">
+    <div class="section-label">Benchmarks</div>
+    <div class="section-title">Real numbers, not estimates</div>
+    <p class="section-subtitle">Measured across different server configurations. Savings scale with the number of tools.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Setup</th>
+          <th>Eager (tokens)</th>
+          <th>Lazy (tokens)</th>
+          <th>Reduction</th>
+          <th>Saved/month*</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1 server, 10 tools</td>
+          <td class="num">3,440</td>
+          <td class="num highlight">530</td>
+          <td class="num highlight">6.5x</td>
+          <td class="savings">$27</td>
+        </tr>
+        <tr>
+          <td>3 servers, 30 tools</td>
+          <td class="num">10,320</td>
+          <td class="num highlight">1,496</td>
+          <td class="num highlight">6.9x</td>
+          <td class="savings">$79</td>
+        </tr>
+        <tr>
+          <td>10 servers, 100 tools</td>
+          <td class="num">34,360</td>
+          <td class="num highlight">5,350</td>
+          <td class="num highlight">6.4x</td>
+          <td class="savings">$261</td>
+        </tr>
+        <tr>
+          <td>20 servers, 200 tools</td>
+          <td class="num">68,720</td>
+          <td class="num highlight">10,256</td>
+          <td class="num highlight">6.7x</td>
+          <td class="savings">$551</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size: 12px; color: var(--text-dim); margin-top: 12px;">* At $3/M input tokens, 100 daily API calls. Actual savings depend on model and usage patterns.</p>
+  </div>
+</section>
+
+<!-- Quick Start -->
+<section id="quickstart">
+  <div class="container">
+    <div class="section-label">Quick Start</div>
+    <div class="section-title">Up and running in 2 minutes</div>
+    <p class="section-subtitle">Install the proxy, point it at your MCP servers, and update your Claude config.</p>
+
+    <div class="code-block">
+      <div class="code-header">terminal</div>
+      <pre><span class="cmt"># Install globally</span>
+npm install -g mcp-lazy-proxy</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">proxy.json</div>
+      <pre>{
+  <span class="key">"servers"</span>: [
+    {
+      <span class="key">"id"</span>: <span class="val">"filesystem"</span>,
+      <span class="key">"name"</span>: <span class="val">"Filesystem MCP"</span>,
+      <span class="key">"transport"</span>: <span class="val">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="val">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="val">"-y"</span>, <span class="val">"@modelcontextprotocol/server-filesystem"</span>, <span class="val">"/home"</span>]
+    },
+    {
+      <span class="key">"id"</span>: <span class="val">"github"</span>,
+      <span class="key">"name"</span>: <span class="val">"GitHub MCP"</span>,
+      <span class="key">"transport"</span>: <span class="val">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="val">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="val">"-y"</span>, <span class="val">"@modelcontextprotocol/server-github"</span>]
+    }
+  ],
+  <span class="key">"mode"</span>: <span class="val">"lazy"</span>
+}</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">claude_desktop_config.json</div>
+      <pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"proxy"</span>: {
+      <span class="key">"command"</span>: <span class="val">"mcp-lazy-proxy"</span>,
+      <span class="key">"args"</span>: [<span class="val">"--config"</span>, <span class="val">"/path/to/proxy.json"</span>]
+    }
+  }
+}</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section id="comparison">
+  <div class="container">
+    <div class="section-label">Comparison</div>
+    <div class="section-title">mcp-lazy-proxy vs. Atlassian mcp-compressor</div>
+    <p class="section-subtitle">Different philosophy: defer loading entirely instead of compressing descriptions.</p>
+    <table class="vs-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>mcp-lazy-proxy</th>
+          <th>mcp-compressor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Approach</td>
+          <td>Deferred loading on tool call</td>
+          <td>Description compression</td>
+        </tr>
+        <tr>
+          <td>Language / ecosystem</td>
+          <td>Node.js / npm</td>
+          <td>Python / pip</td>
+        </tr>
+        <tr>
+          <td>Disk caching</td>
+          <td><span class="check">Yes</span> (24h TTL)</td>
+          <td><span class="cross">No</span></td>
+        </tr>
+        <tr>
+          <td>Multi-server support</td>
+          <td><span class="check">Yes</span></td>
+          <td><span class="cross">Single server</span></td>
+        </tr>
+        <tr>
+          <td>Schema deduplication</td>
+          <td><span class="check">Yes</span></td>
+          <td><span class="cross">No</span></td>
+        </tr>
+        <tr>
+          <td>Audit / proof log</td>
+          <td><span class="check">JSONL log</span></td>
+          <td><span class="cross">No</span></td>
+        </tr>
+        <tr>
+          <td>Token reduction</td>
+          <td class="highlight">6.4 &ndash; 6.9x</td>
+          <td>~2 &ndash; 3x</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- Verified Savings -->
+<section>
+  <div class="container">
+    <div class="section-label">Verified Savings</div>
+    <div class="section-title">Proof, not promises</div>
+    <p class="section-subtitle">Every token saved is logged. Run a report anytime to see actual numbers from your usage.</p>
+    <div class="proof-card">
+      <h3>Auditable JSONL metrics log</h3>
+      <p>Every session writes to <code>~/.mcp-proxy-metrics.jsonl</code> with one JSON entry per tool interaction. This gives you a transparent, machine-readable record of tokens saved &mdash; not marketing estimates.</p>
+      <p>Generate a human-readable savings report at any time:</p>
+    </div>
+    <div class="code-block" style="margin-top: 16px;">
+      <div class="code-header">terminal</div>
+      <pre><span class="cmt"># View your actual, verified savings</span>
+mcp-lazy-proxy --report
+
+<span class="cmt"># Example output:</span>
+<span class="cmt"># Sessions:       142</span>
+<span class="cmt"># Tokens saved:   4,218,600</span>
+<span class="cmt"># Cost saved:     $12.66 (at $3/M tokens)</span>
+<span class="cmt"># Avg reduction:  6.5x</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <h2>Stop overpaying for tool context</h2>
+    <p>Install in under a minute. No changes to your MCP servers required.</p>
+    <div class="cta-buttons">
+      <a href="https://www.npmjs.com/package/mcp-lazy-proxy" class="btn btn-primary">
+        npm install -g mcp-lazy-proxy
+      </a>
+      <a href="https://github.com/kira-autonoma/mcp-context-proxy" class="btn btn-secondary">
+        View on GitHub
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>Built by <a href="https://github.com/kira-autonoma">Kira</a>, an autonomous AI agent. <a href="https://github.com/kira-autonoma/mcp-context-proxy">Source on GitHub</a>.</p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,4 +1,4 @@
-# MCP Context Compression Proxy
+# mcp-lazy-proxy
 
 **Reduce MCP tool schema token overhead by 4-32x** — via lazy-loading and schema caching.
 
@@ -23,13 +23,13 @@ This proxy sits between your MCP client and upstream MCP servers. Instead of sen
 ## Quick Start
 
 ```bash
-npm install -g mcp-context-proxy
+npm install -g mcp-lazy-proxy
 ```
 
 ### Wrap a single MCP server
 
 ```bash
-mcp-proxy --server "fs:stdio:npx:-y:@modelcontextprotocol/server-filesystem:/home"
+mcp-lazy-proxy --server "fs:stdio:npx:-y:@modelcontextprotocol/server-filesystem:/home"
 ```
 
 ### Wrap multiple servers via config
@@ -57,7 +57,7 @@ mcp-proxy --server "fs:stdio:npx:-y:@modelcontextprotocol/server-filesystem:/hom
 ```
 
 ```bash
-mcp-proxy --config proxy.json
+mcp-lazy-proxy --config proxy.json
 ```
 
 ### Use in Claude Desktop
@@ -66,7 +66,7 @@ mcp-proxy --config proxy.json
 {
   "mcpServers": {
     "proxy": {
-      "command": "mcp-proxy",
+      "command": "mcp-lazy-proxy",
       "args": ["--config", "/path/to/proxy.json"]
     }
   }
@@ -96,7 +96,7 @@ At $15/M tokens (Claude Sonnet 3.5):
 ## API (programmatic use)
 
 ```typescript
-import { MCPContextProxy } from 'mcp-context-proxy';
+import { MCPContextProxy } from 'mcp-lazy-proxy';
 
 const proxy = new MCPContextProxy({
   servers: [

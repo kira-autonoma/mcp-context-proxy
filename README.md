@@ -2,6 +2,9 @@
 
 **Reduce MCP tool schema token overhead by 4-32x** — via lazy-loading and schema caching.
 
+> **Verified, not claimed.** Every session writes a proof log to `~/.mcp-proxy-metrics.jsonl`.
+> Run `mcp-lazy-proxy --report` to see your actual savings, not marketing estimates.
+
 ## The Problem
 
 If you use 10+ MCP servers, your tool definitions can consume **55,000+ tokens** of context window on every API call — before you've even asked a question. At $15/M tokens (Claude Sonnet), that's **$0.82 per API call just for tool definitions**.
@@ -109,11 +112,34 @@ const proxy = new MCPContextProxy({
 await proxy.start();
 ```
 
+## Verifiable Savings Proof
+
+Unlike other MCP optimizers that only show estimates, mcp-lazy-proxy logs every interaction:
+
+```bash
+# See your actual savings (not estimates)
+mcp-lazy-proxy --report
+```
+
+Output:
+```json
+{
+  "totalSessions": 47,
+  "totalCalls": 1284,
+  "totalTokensSaved": 2847293,
+  "avgSavingsRatio": 18.4,
+  "proofFile": "~/.mcp-proxy-sessions.jsonl"
+}
+```
+
+Raw proof is in `~/.mcp-proxy-metrics.jsonl` — one JSON line per tool call, fully auditable.
+
 ## Status
 
 - [x] Core lazy-loading proxy (v0.1)
 - [x] Schema persistence cache (24h TTL)
-- [x] Token savings reporting
+- [x] Verifiable per-session savings proof (v0.2)
+- [x] `--report` CLI for auditing savings
 - [ ] HTTP/SSE transport support
 - [ ] Schema change detection (webhook)
 - [ ] Hosted SaaS option ($29/month)

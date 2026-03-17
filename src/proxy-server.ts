@@ -20,7 +20,8 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { SchemaStore } from "./schema-cache";
-import { computeSavings } from "./token-estimator";
+import { computeSavings, estimateTokens, schemaTokens } from "./token-estimator";
+import { MetricsTracker } from "./metrics";
 import { ProxyConfig, ServerConfig, ToolSchema } from "./types";
 
 interface UpstreamClient {
@@ -37,6 +38,9 @@ export class MCPContextProxy {
   private server: Server;
   // toolName -> serverId (for routing calls)
   private toolRouter: Map<string, string> = new Map();
+  private metrics?: MetricsTracker;
+  // Track tokens already sent to LLM this session (stubs only in lazy mode)
+  private tokensServedToLLM: number = 0;
 
   constructor(config: ProxyConfig) {
     this.config = config;
@@ -59,11 +63,27 @@ export class MCPContextProxy {
       await this.connectUpstream(serverConfig);
     }
 
-    // Report savings
+    // Report savings and init metrics tracker
+    const eagerBaseline = this.computeEagerBaseline();
+    const serverNames = Array.from(this.upstreams.values()).map((u) => u.config.name);
+    this.metrics = new MetricsTracker(eagerBaseline, serverNames);
     this.reportSavings();
 
     // Set up handlers
     this.setupHandlers();
+
+    // Print metrics report every 5 minutes
+    const reportInterval = setInterval(() => this.metrics?.printReport(), 5 * 60 * 1000);
+    reportInterval.unref(); // don't prevent exit
+
+    // Finalize on exit
+    process.on("SIGINT", () => {
+      if (this.metrics) {
+        this.metrics.finalizeSession(this.tokensServedToLLM);
+        this.metrics.printReport();
+      }
+      process.exit(0);
+    });
 
     // Start serving
     const transport = new StdioServerTransport();
@@ -184,9 +204,36 @@ export class MCPContextProxy {
       const upstream = this.upstreams.get(serverId)!;
 
       // Lazy-load schema if not in memory
+      const t0 = Date.now();
+      let schemaSource: "cache" | "lazy-fetched" | "eager" = "cache";
+
       if (!upstream.tools.has(name)) {
-        await this.fetchSchema(upstream, name);
+        const cached = this.schemaStore.get(serverId!, name);
+        if (cached) {
+          upstream.tools.set(name, cached);
+          schemaSource = "cache";
+        } else {
+          await this.fetchSchema(upstream, name);
+          schemaSource = "lazy-fetched";
+        }
+      } else if (this.config.mode === "eager") {
+        schemaSource = "eager";
       }
+
+      // Compute tokens saved vs eager loading this schema
+      const schema = upstream.tools.get(name);
+      const schemaToks = schema ? schemaTokens(schema) : 0;
+      // In lazy mode: we only served a stub (~50 tokens). Real schema is schemaToks.
+      const stubToks = 50; // approximate stub size
+      const tokensSaved = this.config.mode !== "eager" ? Math.max(0, schemaToks - stubToks) : 0;
+
+      this.metrics?.recordCall({
+        tool: name,
+        server: upstream.config.name,
+        schemaSource,
+        tokensSaved,
+        latencyMs: Date.now() - t0,
+      });
 
       // Proxy the actual call
       try {
@@ -228,6 +275,21 @@ export class MCPContextProxy {
     }
   }
 
+  private computeEagerBaseline(): number {
+    let total = 0;
+    for (const upstream of this.upstreams.values()) {
+      for (const schema of upstream.tools.values()) {
+        total += schemaTokens(schema);
+      }
+    }
+    // For tools not yet fetched, estimate ~200 tokens per tool
+    for (const upstream of this.upstreams.values()) {
+      const unfetched = upstream.toolNames.length - upstream.tools.size;
+      total += unfetched * 200;
+    }
+    return total;
+  }
+
   private reportSavings(): void {
     let totalTools = 0;
     const allSchemas: ToolSchema[] = [];
@@ -239,15 +301,23 @@ export class MCPContextProxy {
       }
     }
 
-    const { servers } = this.schemaStore.stats();
     console.error(`[Proxy] ${this.upstreams.size} servers, ${totalTools} tools`);
 
     if (allSchemas.length > 0) {
       const savings = computeSavings(allSchemas);
       console.error(
-        `[Proxy] Token savings: ${savings.eagerTokens} → ${savings.lazyTokens} ` +
-        `(${savings.ratio}x reduction, ${savings.saved} tokens saved)`
+        `[Proxy] Baseline token estimate: ${savings.eagerTokens} eager → ${savings.lazyTokens} lazy ` +
+        `(~${savings.ratio}x reduction, ${savings.saved} tokens saved)`
+      );
+    } else {
+      // Estimate based on tool count (200 tokens avg per tool)
+      const estimated = totalTools * 200;
+      const lazyEstimate = totalTools * 50;
+      console.error(
+        `[Proxy] Estimated baseline: ~${estimated} tokens eager → ~${lazyEstimate} tokens lazy ` +
+        `(~${Math.round(estimated / lazyEstimate)}x reduction)`
       );
     }
+    console.error(`[Proxy] Proof logged to ~/.mcp-proxy-metrics.jsonl`);
   }
 }

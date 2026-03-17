@@ -19,6 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { MCPContextProxy } from "./proxy-server";
+import { readHistoricalSummary } from "./metrics";
 import { ProxyConfig, ServerConfig } from "./types";
 
 function parseArgs(): ProxyConfig {
@@ -88,6 +89,30 @@ Config file format:
 }
 
 async function main(): Promise<void> {
+  // --report: dump historical savings summary and exit
+  if (process.argv.includes("--report")) {
+    const summary = readHistoricalSummary();
+    if (summary.totalSessions === 0) {
+      console.log("No sessions recorded yet. Run the proxy first.");
+      process.exit(0);
+    }
+    console.log(JSON.stringify({
+      totalSessions: summary.totalSessions,
+      totalCalls: summary.totalCalls,
+      totalTokensSaved: summary.totalTokensSaved,
+      avgSavingsRatio: summary.avgSavingsRatio,
+      proofFile: "~/.mcp-proxy-sessions.jsonl",
+      recentSessions: summary.sessions.map((s) => ({
+        id: s.sessionId,
+        date: new Date(s.startedAt).toISOString(),
+        calls: s.totalCalls,
+        tokensSaved: s.totalTokensSaved,
+        savingsRatio: s.savingsRatio + "x",
+      })),
+    }, null, 2));
+    process.exit(0);
+  }
+
   try {
     const config = parseArgs();
     const proxy = new MCPContextProxy(config);

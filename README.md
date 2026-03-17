@@ -145,8 +145,30 @@ Raw proof is in `~/.mcp-proxy-metrics.jsonl` — one JSON line per tool call, fu
 | Mechanism | Lazy-load on call | Description compression |
 | Schema caching | ✅ Disk (24h TTL) | ❌ |
 | Proof logging | ✅ Auditable JSONL | ❌ |
-| Response compression | 🔜 Planned | ❌ |
+| Response compression | ✅ JSON summary + text truncation | ❌ |
 | Hosted option | 🔜 Planned | ❌ |
+
+## Response Compression (v0.2)
+
+Large tool call responses are automatically compressed before reaching the LLM:
+
+- **JSON responses**: Summarized — arrays truncated to first 3 items with count, long strings shortened, full structure preserved
+- **Plain text**: Truncated to 10,000 chars with `[truncated, X chars total]` note
+- **Error responses**: Never compressed (LLM needs full error context)
+- **Configurable**: Set `responseCompression: false` in config to disable, or fine-tune thresholds
+
+```json
+{
+  "servers": [...],
+  "mode": "lazy",
+  "responseCompression": {
+    "enabled": true,
+    "maxTextLength": 10000,
+    "minCompressLength": 1000,
+    "maxArrayItems": 3
+  }
+}
+```
 
 ## Status
 
@@ -155,8 +177,8 @@ Raw proof is in `~/.mcp-proxy-metrics.jsonl` — one JSON line per tool call, fu
 - [x] Verifiable per-session savings proof
 - [x] `--report` CLI for auditing savings
 - [x] E2E tested with real MCP servers
+- [x] Response compression (v0.2)
 - [ ] HTTP/SSE transport support
-- [ ] Response compression
 - [ ] Schema change detection (webhook)
 - [ ] Hosted SaaS option
 

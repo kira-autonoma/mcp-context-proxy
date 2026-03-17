@@ -32,11 +32,38 @@ export interface ServerConfig {
   env?: Record<string, string>;
 }
 
+export interface ResponseCompressionConfig {
+  enabled: boolean;
+  maxTextLength: number;       // default 10000
+  minCompressLength: number;   // default 1000
+  maxArrayItems: number;       // default 3
+}
+
 export interface ProxyConfig {
   servers: ServerConfig[];
   mode: "lazy" | "eager" | "stub-only";  // lazy = default (fetch on first use)
   cacheDir?: string;
   port?: number;
+  responseCompression?: boolean | ResponseCompressionConfig;
+}
+
+// MCP content types (for response compression)
+export interface TextContent {
+  type: "text";
+  text: string;
+}
+
+export interface ImageContent {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+export type ContentItem = TextContent | ImageContent;
+
+export interface ToolCallResult {
+  content: ContentItem[];
+  isError?: boolean;
 }
 
 export interface SchemaCache {

@@ -22,7 +22,8 @@ import {
 import { SchemaStore } from "./schema-cache";
 import { computeSavings, estimateTokens, schemaTokens } from "./token-estimator";
 import { MetricsTracker } from "./metrics";
-import { ProxyConfig, ServerConfig, ToolSchema } from "./types";
+import { ProxyConfig, ServerConfig, ToolSchema, ToolCallResult } from "./types";
+import { compressToolResult, resolveCompressionConfig, type CompressionResult } from "./response-compress";
 
 interface UpstreamClient {
   config: ServerConfig;
@@ -41,10 +42,12 @@ export class MCPContextProxy {
   private metrics?: MetricsTracker;
   // Track tokens already sent to LLM this session (stubs only in lazy mode)
   private tokensServedToLLM: number = 0;
+  private compressionConfig = resolveCompressionConfig(undefined);
 
   constructor(config: ProxyConfig) {
     this.config = config;
     this.schemaStore = new SchemaStore(config.cacheDir);
+    this.compressionConfig = resolveCompressionConfig(config.responseCompression);
     this.server = new Server(
       { name: "mcp-context-proxy", version: "0.1.0" },
       {
@@ -238,6 +241,20 @@ export class MCPContextProxy {
       // Proxy the actual call
       try {
         const result = await upstream.client.callTool({ name, arguments: args || {} });
+
+        // Apply response compression if enabled
+        if (this.compressionConfig.enabled && result.content) {
+          const compressed = compressToolResult(
+            result as unknown as ToolCallResult,
+            this.compressionConfig,
+          );
+          if (compressed.wasCompressed) {
+            const responseTokensSaved = Math.round((compressed.originalChars - compressed.compressedChars) / 4);
+            console.error(`[Proxy] Response compressed: ${compressed.originalChars} → ${compressed.compressedChars} chars (saved ~${responseTokensSaved} tokens)`);
+          }
+          return { ...result, content: compressed.result.content } as typeof result;
+        }
+
         return result;
       } catch (e) {
         return {

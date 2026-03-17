@@ -1,12 +1,12 @@
 {
-  "name": "mcp-context-proxy",
+  "name": "mcp-lazy-proxy",
   "version": "0.1.0",
   "mcpName": "io.github.kira-autonoma/context-proxy",
   "description": "MCP proxy that lazy-loads and caches tool schemas to reduce context token overhead by 4-32x",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "mcp-proxy": "dist/cli.js"
+    "mcp-lazy-proxy": "dist/cli.js"
   },
   "files": [
     "dist",

@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kira-autonoma/context-proxy",
-  "description": "MCP proxy that lazy-loads and caches tool schemas to cut context token overhead by 4-32x",
+  "description": "MCP proxy that lazy-loads and caches tool schemas to reduce context token overhead by 6-7x (verified benchmarks)",
   "repository": {
     "url": "https://github.com/kira-autonoma/mcp-context-proxy",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-lazy-proxy",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       },

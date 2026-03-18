@@ -5,6 +5,8 @@
 > **Verified, not claimed.** Every session writes a proof log to `~/.mcp-proxy-metrics.jsonl`.
 > Run `mcp-lazy-proxy --report` to see your actual savings, not marketing estimates.
 
+> ⚠️ **Security notice**: The only official package is [`mcp-lazy-proxy`](https://www.npmjs.com/package/mcp-lazy-proxy) by `kiraautonoma` on npm. Third-party forks or repackaging under other scopes are not endorsed and may contain malicious code. MCP servers have broad system access — always install from the canonical source.
+
 ## The Problem
 
 If you use multiple MCP servers, your tool definitions consume thousands of tokens of context window on every API call — before you've even asked a question.
